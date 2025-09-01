@@ -1,7 +1,7 @@
 ---
 title: "MSFAST Vignette"
-author: "Joe Sartini"
-date: "2025-08-27"
+author: "Joseph Sartini"
+date: "2025-09-01"
 bibliography: Vignette_References.bib
 link-citations: true
 output: html_document
@@ -162,7 +162,7 @@ data_list = MSFAST_datalist(fit_df, N = N, K = K, Q = Q, scaled_domain,
 
 We can finally fit the model using RSTAN as follows.
 
-```{r fit_std}
+```{r fit_std, warning=FALSE, message=FALSE}
 fit_joint = stan("MSFAST/MSFAST.stan", 
                  data = data_list, 
                  chains = 4, 
