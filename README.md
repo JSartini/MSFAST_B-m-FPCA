@@ -10,17 +10,17 @@ Includes STAN code, R scripts performing comparative simulations for performance
 
 ### R Package Dependencies for Comparator Methods
 
-* [@mfaces](https://cran.r-project.org/package=mfaces)
-* [@MFPCA](https://cran.r-project.org/package=MFPCA)
-* [@bayesFPCA](https://github.com/hruffieux/bayesFPCA)
-* [@face](https://cran.r-project.org/package=face)
-* [@fdapace](https://cran.r-project.org/package=fdapace)
+* [mfaces](https://cran.r-project.org/package=mfaces)
+* [MFPCA](https://cran.r-project.org/package=MFPCA)
+* [bayesFPCA](https://github.com/hruffieux/bayesFPCA)
+* [face](https://cran.r-project.org/package=face)
+* [fdapace](https://cran.r-project.org/package=fdapace)
 
 ### R Package Dependencies for Orthogonal Spline Bases
 
-* [@Splinets](https://cran.r-project.org/package=Splinets)
-* [@orthogonalsplinebasis](https://cran.r-project.org/package=orthogonalsplinebasis)
-* [@orthopolynom](https://cran.r-project.org/package=orthopolynom)
+* [Splinets](https://cran.r-project.org/package=Splinets)
+* [orthogonalsplinebasis](https://cran.r-project.org/package=orthogonalsplinebasis)
+* [orthopolynom](https://cran.r-project.org/package=orthopolynom)
 
 ### Installing
 
@@ -29,7 +29,7 @@ Includes STAN code, R scripts performing comparative simulations for performance
 
 ### Executing program
 
-* All simulation scripts expect to be called from Command Line (e.g.)
+* All simulation scripts expect to be called from Command Line. Find example below, where 10 iterations of the multivariate simulation are run with each covariate having between 5 and 15 observations:
 ```
 Rscript Multivar_Accuracy.R "Multi_5to15" "output" 10 5 15
 ```
@@ -37,8 +37,7 @@ Rscript Multivar_Accuracy.R "Multi_5to15" "output" 10 5 15
 
 ## Authors
 
-Joseph Sartini
-[@JSartini](https://jsartini.github.io/Sartini-Stats/)
+[Joseph Sartini](https://jsartini.github.io/Sartini-Stats/)
 
 ## Version History
 
