@@ -108,6 +108,26 @@ FPC_Est_WEI <- function(weights, B, P, Domain, anchor = NULL){
   return(FPC_df(phi_est, Domain, P))
 }
 
+# Calculate FPC estimate by taking right SV in latent space - novel
+Latent_RSV <- function(weights, scores, B, P, Domain, anchor = NULL){
+  psi_hat = pmap(list(weights, scores), function(w, s){
+    return(s %*% t(w))
+  }) %>% abind(along = 3) %>%
+    apply(c(1,2), mean)
+  
+  kB = kronecker(diag(1, P), B)
+  K = dim(scores[[1]])[2]
+  phi_est = kB %*% svd(psi_hat, nv = K)$v
+  
+  if(!is.null(anchor)){
+    R_comps = svd(t(phi_est) %*% anchor)
+    R = R_comps$u %*% t(R_comps$v)
+    phi_est = phi_est %*% R
+  }
+  
+  return(FPC_df(phi_est, Domain, P))
+}
+
 # Calculate CI of FPC using vectorized operations
 FPC_CI <- function(EF_list, Domain, P){
   n_samp = length(EF_list)
@@ -148,7 +168,7 @@ FE_Summary <- function(Mu_list, Domain, P){
 }
 
 # Calculate smooth estimates with associated CI using vectorized operations
-Smooth_Summary <- function(N, P, Mu_list, EF_list, Score_list, Domain){
+Smooth_Summary <- function(N, P, Mu_list, EF_list, Score_list, Domain, parallel = TRUE){
   sm_df <- function(mat, ids, P, Domain){
     out_df = data.frame(mat)
     colnames(out_df) = paste0("Curve ", ids)
@@ -162,31 +182,59 @@ Smooth_Summary <- function(N, P, Mu_list, EF_list, Score_list, Domain){
   size_group = 25
   sub_groups = split(1:N, ceiling(seq_along(1:N)/size_group))
   
-  plan(multisession, workers = 4)
-  Smooth_DF = future_map(sub_groups, function(idxs){
-    sg = length(idxs)
-    
-    smooths = map(1:n_samp, function(x){
-      smooth = matrix(rep(Mu_list[[x]], sg), nrow = sg, byrow = T)
-      smooth = smooth + Score_list[[x]][idxs,] %*% t(EF_list[[x]])
-      return(smooth)
-    }) %>% abind(along = 0)
-    
-    mean_sm = sm_df(t(apply(smooths, c(2,3), mean)), idxs, P, Domain) %>%
-      rename(Est = Smooth)
-    lb_sm = sm_df(t(apply(smooths, c(2,3), quantile, probs = c(0.025))), 
-                         idxs, P, Domain) %>%
-      rename(LB = Smooth)
-    ub_sm = sm_df(t(apply(smooths, c(2,3), quantile, probs = c(0.975))), 
-                         idxs, P, Domain) %>%
-      rename(UB = Smooth)
-    
-    out_df = mean_sm %>%
-      inner_join(lb_sm, by = c("Curve", "Var", "Arg")) %>%
-      inner_join(ub_sm, by = c("Curve", "Var", "Arg"))
-    
-    return(out_df)}) %>% list_rbind()
-  plan(sequential)
+  if(parallel){
+    plan(multisession, workers = 4)
+    Smooth_DF = future_map(sub_groups, function(idxs){
+      sg = length(idxs)
+      
+      smooths = map(1:n_samp, function(x){
+        smooth = matrix(rep(Mu_list[[x]], sg), nrow = sg, byrow = T)
+        smooth = smooth + Score_list[[x]][idxs,] %*% t(EF_list[[x]])
+        return(smooth)
+      }) %>% abind(along = 0)
+      
+      mean_sm = sm_df(t(apply(smooths, c(2,3), mean)), idxs, P, Domain) %>%
+        rename(Est = Smooth)
+      lb_sm = sm_df(t(apply(smooths, c(2,3), quantile, probs = c(0.025))), 
+                    idxs, P, Domain) %>%
+        rename(LB = Smooth)
+      ub_sm = sm_df(t(apply(smooths, c(2,3), quantile, probs = c(0.975))), 
+                    idxs, P, Domain) %>%
+        rename(UB = Smooth)
+      
+      out_df = mean_sm %>%
+        inner_join(lb_sm, by = c("Curve", "Var", "Arg")) %>%
+        inner_join(ub_sm, by = c("Curve", "Var", "Arg"))
+      
+      return(out_df)}) %>% list_rbind()
+    plan(sequential)
+  }
+  else{
+    Smooth_DF = map(sub_groups, function(idxs){
+      sg = length(idxs)
+      
+      smooths = map(1:n_samp, function(x){
+        smooth = matrix(rep(Mu_list[[x]], sg), nrow = sg, byrow = T)
+        smooth = smooth + Score_list[[x]][idxs,] %*% t(EF_list[[x]])
+        return(smooth)
+      }) %>% abind(along = 0)
+      
+      mean_sm = sm_df(t(apply(smooths, c(2,3), mean)), idxs, P, Domain) %>%
+        rename(Est = Smooth)
+      lb_sm = sm_df(t(apply(smooths, c(2,3), quantile, probs = c(0.025))), 
+                    idxs, P, Domain) %>%
+        rename(LB = Smooth)
+      ub_sm = sm_df(t(apply(smooths, c(2,3), quantile, probs = c(0.975))), 
+                    idxs, P, Domain) %>%
+        rename(UB = Smooth)
+      
+      out_df = mean_sm %>%
+        inner_join(lb_sm, by = c("Curve", "Var", "Arg")) %>%
+        inner_join(ub_sm, by = c("Curve", "Var", "Arg"))
+      
+      return(out_df)}) %>% list_rbind()
+  }
+  
   return(Smooth_DF)
 }
 
