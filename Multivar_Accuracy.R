@@ -7,6 +7,7 @@ source("Gen_Funcs/Comparisons.R")
 
 # Specific to each method
 source("MSFAST/MSFAST_Help.R")
+source("Multivar_Comparators/Univar.R")
 source("Multivar_Comparators/mFACEs.R")
 source("Multivar_Comparators/mFPCA.R")
 source("Multivar_Comparators/vmp.R")
@@ -23,16 +24,17 @@ args = commandArgs(trailingOnly=TRUE)
 
 n_sim = as.numeric(args[3])
 obs_ran = as.numeric(args[4]):as.numeric(args[5])
+P = as.numeric(args[6])
+SNR = as.numeric(args[7])
 diff_obs = T
 N = 100
 M = 100
 Q = 20
 K = 3
-P = 3
 sim_domain = seq(0, 1, length.out = M)
 quad_weights = booleQuad(sim_domain)
 
-func_objs = Multivar_F(P, K, 4)
+func_objs = Multivar_F(P, K, SNR)
 MuFun = func_objs$Mu
 FPCs = func_objs$FPC
 EVals = func_objs$EV
@@ -55,12 +57,14 @@ message("Output directory: ", args[1])
 message("Output file: ", args[2])
 message("Number of simulations: ", args[3])
 message("Range: " ,args[4], " - ", args[5])
+message("Number of Variates: ", args[6])
 
-FE_out = data.frame(Method = c(), Var = c(), Cov = c(), ISE = c(), Sample = c())
+FE_out = data.frame(Method = c(), Var = c(), Cov = c(), ISE = c(), Sample = c(),
+                    P = c(), NObs = c())
 EF_out = data.frame(Method = c(), Var = c(), FPC_Num = c(), Cov = c(), 
-                    ISE = c(), Sample = c())
+                    ISE = c(), Sample = c(), P = c(), NObs = c())
 Smooth_out = data.frame(Method = c(), Var = c(), RISE = c(), Cov = c(), 
-                        Sample = c())
+                        Sample = c(), P = c(), NObs = c())
 
 for(x in 1:n_sim){
   print(paste0("Iteration: ", x))
@@ -95,10 +99,10 @@ for(x in 1:n_sim){
       data = data_list, 
       chains = 4, 
       cores = 4, 
-      warmup = 1000, 
-      iter = 2000, 
-      control = list(max_treedepth = 12,
-                     adapt_delta = 0.85),
+      warmup = 250, 
+      iter = 750, 
+      # init = init_list,
+      control = list(max_treedepth = 12),
       verbose = F,
       refresh = 0
     )
@@ -114,7 +118,7 @@ for(x in 1:n_sim){
              LB = LB * sd_Y + mu_Y, 
              UB = UB * sd_Y + mu_Y)
     
-    EF_ests = FPC_Est_WEI(align$Weights, new_B, P, sim_domain, mObjs$mFPC)
+    EF_ests = Latent_RSV(objects$Weights, objects$Score, new_B, P, sim_domain, mObjs$mFPC)
     EF_df = inner_join(FPC_CI(align$EF, sim_domain, P), 
                        EF_ests)
     
@@ -153,6 +157,27 @@ for(x in 1:n_sim){
       mutate(Sample = x)
   }
   
+  # Univariate FACE separately (Xiao and Li 2016)
+  {
+    DL = ufpca_datalist(sim_dataset$ddf, N, P, sim_domain)
+    
+    fits = map(1:P, function(p){
+      fit = face.sparse(data = DL$fit[[p]], argvals.new = sim_domain, 
+                        pve = 0.999, center = T, calculate.scores = T)
+      return(fit)
+    })
+    
+    uFACE_objs = extract_ufpca(fits, sim_domain, N, P, mObjs$mFPC, DL)
+    
+    # Calculate performance
+    FE_uFACE = FE_comp(mObjs$Mu, uFACE_objs$FE, "uFPCA") %>%
+      mutate(Sample = x)
+    EF_uFACE = EF_comp(mObjs$FPC, uFACE_objs$EF, "uFPCA") %>%
+      mutate(Sample = x)
+    Smooth_uFACE = Smooth_comp(trueSmooth, uFACE_objs$Smooth, "uFPCA") %>%
+      mutate(Sample = x)
+  }
+  
   # mFPCA (Happ and Greven 2018)
   {
     DL = mfpca_datalist(sim_dataset$ddf, N, P, sim_domain)
@@ -186,6 +211,23 @@ for(x in 1:n_sim){
       mutate(Sample = x)
   }
   
+  # Mean Field Approximation (T.H. Nolan 2025)
+  {
+    DL = vmp_datalist(sim_dataset$ddf, N, P)
+    
+    mf_fit = run_mfvb_fpca(DL$t, DL$y, K, Q, verbose = F, time_g = sim_domain)
+    
+    MF_objs = extract_vmp(mf_fit, sim_domain, N, K, P, mObjs$mFPC)
+    
+    # Calculate performance
+    FE_MF = FE_comp(mObjs$Mu, MF_objs$FE, "MF") %>%
+      mutate(Sample = x)
+    EF_MF = EF_comp(mObjs$FPC, MF_objs$EF, "MF") %>%
+      mutate(Sample = x)
+    Smooth_MF = Smooth_comp(trueSmooth, MF_objs$Smooth, "MF") %>%
+      mutate(Sample = x)
+  }
+  
   # Simple mean functions as smooth
   {
     Smooth_df = map(1:N, function(x){
@@ -209,14 +251,17 @@ for(x in 1:n_sim){
   
   # Collate model component results
   {
-    FE_df = rbind(FE_FAST, FE_FACE, FE_FPCA, FE_VMP)
-    EF_df = rbind(EF_FAST, EF_FACE, EF_FPCA, EF_VMP)
+    FE_df = rbind(FE_FAST, FE_FACE, FE_uFACE, FE_FPCA, FE_VMP, FE_MF) %>%
+      mutate(P = P, NObs = paste0(args[4], "-", args[5]), SNR = SNR)
+    EF_df = rbind(EF_FAST, EF_FACE, EF_uFACE, EF_FPCA, EF_VMP, EF_MF) %>%
+      mutate(P = P, NObs = paste0(args[4], "-", args[5]), SNR = SNR)
   }
   
   # Collate prediction results (RISE)
   {
-    Smooth_df = rbind(Smooth_FAST, Smooth_FACE, 
-                      Smooth_FPCA, Smooth_VMP)
+    # Smooth_FAST_vb,
+    Smooth_df = rbind(Smooth_FAST, Smooth_FACE, Smooth_uFACE, Smooth_FPCA,
+                      Smooth_VMP, Smooth_MF)
     Smooth_df = left_join(Smooth_df, Smooth_mean %>% 
                             rename(BaseISE = ISE) %>%
                             select(Var, Curve, BaseISE)) %>%
@@ -224,7 +269,9 @@ for(x in 1:n_sim){
       select(-c(BaseISE, ISE)) %>%
       group_by(Method, Var) %>%
       summarize(RISE = mean(RISE), Cov = mean(Cov), 
-                Sample = first(Sample))
+                Sample = first(Sample)) %>%
+      mutate(P = P, NObs = paste0(args[4], "-", args[5]), 
+             SNR = SNR)
   }
   
   # Add most recent result
