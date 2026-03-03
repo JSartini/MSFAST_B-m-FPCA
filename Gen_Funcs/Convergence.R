@@ -41,10 +41,9 @@ RHat_FAST <- function(model, data, B, align_EF){
   fpc_smooth_chains = map(1:n_chains, function(j){
     output = map(1:n_samp, function(i){
       fpc_smooth = raw_samples[i,j,fpcsmooth_idx]
-      dim(fpc_smooth) = c(data$P, data$K) # 1
       return(fpc_smooth)
-    }) %>% abind(along = 3)
-  }) %>% abind(along = 4)
+    }) %>% abind(along = 2)
+  }) %>% abind(along = 3)
   
   sig_idx = grepl("sigma2", dimen_names)
   sigma_chains = map(1:n_chains, function(j){
@@ -68,7 +67,7 @@ RHat_FAST <- function(model, data, B, align_EF){
   sigma_rhat = Rhat(sigma_chains)
   mu_rhats = rep(0, length = data$P*data$M)
   mu_smooth_rhats = rep(0, length = data$P)
-  fpc_smooth_rhats = matrix(0, nrow = data$P, ncol = data$K) # 1
+  fpc_smooth_rhats = rep(0, length = data$K)
   
   for(p in 1:data$P){
     mu_smooth_rhats[p] = Rhat(mu_smooth_chains[p,,])
@@ -79,11 +78,7 @@ RHat_FAST <- function(model, data, B, align_EF){
   for(k in 1:data$K){
     lambda_rhats[k] = Rhat(lambda_chains[k,,])
     
-    for(p in 1:data$P){
-      fpc_smooth_rhats[p,k] = Rhat(fpc_smooth_chains[p,k,,])
-    }
-    
-    # fpc_smooth_rhats[1,k] = Rhat(fpc_smooth_chains[1,k,,])
+    fpc_smooth_rhats[k] = Rhat(fpc_smooth_chains[k,,])
     
     for(n in 1:data$N){
       score_rhats[n, k] = Rhat(score_chains[n,k,,])
@@ -119,11 +114,8 @@ RHat_FAST <- function(model, data, B, align_EF){
   mu_smooth_rhats = data.frame(Function = paste0("Mu", 1:data$P), 
                                RHat = mu_smooth_rhats)
   
-  fpc_smooth_rhats = data.frame(fpc_smooth_rhats)
-  colnames(fpc_smooth_rhats) = paste0("FPC ", 1:data$K)
-  fpc_smooth_rhats$Var = paste0("Var ", 1:data$P)
-  fpc_smooth_rhats = fpc_smooth_rhats %>%
-    pivot_longer(-c(Var), names_to = "FPC", values_to = "RHat") # everything(),
+  fpc_smooth_rhats = data.frame(RHat = fpc_smooth_rhats, 
+                                FPC = paste0("FPC ", 1:data$K))
   
   Variance_rhats = data.frame(Element = c(paste0("Lambda_", 1:data$K), "Sigma2"), 
                               RHat = c(lambda_rhats, sigma_rhat))
