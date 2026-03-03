@@ -15,6 +15,10 @@ data {
   matrix[Q, Q] P_alpha;         // Penalty matrix for splines
 }
 
+transformed data {
+  real EV1 = eigenvalues_sym(P_alpha)[1]; // Leading eigenvalue
+}
+
 parameters {
   vector<lower=0>[P] sigma2; // Error in observation
   
@@ -23,8 +27,8 @@ parameters {
   vector<lower=0>[P] h_mu;  // Population mean smoothing parameter
   
   // Components/weights
-  positive_ordered[K] lambda;        // Eigenvalues
-  matrix<lower=0>[P,K] H;            // EF Smoothing parameters
+  vector<lower=0>[K] lambda;         // Eigenvalues
+  vector<lower=0>[K] H;              // EF Smoothing parameters
   matrix[P*Q, K] X;                  // Unconstrained EF matrix
   matrix[N, K] Xi_Raw;               // EF scores unscaled
 }
@@ -47,12 +51,12 @@ transformed parameters{
 
 model {
   // Variance component priors
-  lambda ~ inv_gamma(0.01, 0.01); 
-  sigma2 ~ inv_gamma(0.01, 0.01);
+  lambda ~ inv_gamma(0.001, 0.001); 
+  sigma2 ~ inv_gamma(0.001, 0.001);
   
   // Smoothing priors
-  h_mu ~ gamma(0.01, 0.01); 
-  to_vector(H) ~ gamma(0.01, 0.01); 
+  h_mu ~ gamma(0.001, 0.001); 
+  H ~ gamma(0.01, EV1/2 + 0.01); 
   
   int sdx;
   int edx;
@@ -63,7 +67,7 @@ model {
     target += Q / 2.0 * log(h_mu[p]) - h_mu[p] / 2.0 * quad_form(P_alpha, w_mu[sdx:edx]);
     
     for(k in 1:K){
-      target += Q / 2.0 * log(H[p,k]) -  H[p,k] / 2.0 * quad_form(P_alpha, Psi[sdx:edx,k]);
+      target += Q / 2.0 * log(H[k]) -  H[k] / 2.0 * quad_form(P_alpha, Psi[sdx:edx,k]);
     }
   }
   

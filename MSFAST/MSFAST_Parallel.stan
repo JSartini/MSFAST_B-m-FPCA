@@ -6,19 +6,18 @@ functions {
                       int Q, int M, int K) {
     real acc = 0;    // log density accumulator for this chunk
 
-    for (i in 1:size(p_slice)) {
-      int p = p_slice[i];
+    for (p in p_slice) {
       int sdx = (p-1)*Q+1;
       int edx = p*Q;
       int Tp = Tp_card[p];
 
       array[Tp] int Subj_p = segment(Subj, start_indices[p], Tp);
       array[Tp] int S_p = segment(S, start_indices[p], Tp);
-      matrix[M, K] Phi_mat = B * Psi[sdx:edx, ];
-      vector[Tp] Theta = rows_dot_product(Scores[Subj_p, ], Phi_mat[S_p, ]);
-      vector[M] mu = B * w_mu[sdx:edx];
+      matrix[Tp, K] Phi_mat = B[S_p, ] * Psi[sdx:edx, ];
+      vector[Tp] Theta = rows_dot_product(Scores[Subj_p, ], Phi_mat);
+      vector[Tp] mu = B[S_p, ] * w_mu[sdx:edx];
 
-      acc += normal_lpdf(segment(Y, start_indices[p], Tp) | mu[S_p] + Theta, sqrt(sigma2[p]));
+      acc += normal_lpdf(segment(Y, start_indices[p], Tp) | Theta + mu, sqrt(sigma2[p]));
     }
     return acc;
   }
@@ -44,6 +43,7 @@ data {
 transformed data{
   array[P] int start_indices;
   array[P] int p_vals;
+  real EV1 = eigenvalues_sym(P_alpha)[1]; // Leading eigenvalue
   {
     int pos = 1;
     for(p in 1:P){
@@ -62,8 +62,8 @@ parameters {
   vector<lower=0>[P] h_mu;  // Population mean smoothing parameter
   
   // Components/weights
-  positive_ordered[K] lambda;        // Eigenvalues
-  matrix<lower=0>[P,K] H;            // EF Smoothing parameters
+  vector<lower=0>[K] lambda;         // Eigenvalues
+  vector<lower=0>[K] H;              // EF Smoothing parameters
   matrix[P*Q, K] X;                  // Unconstrained EF matrix
   matrix[N, K] Xi_Raw;               // EF scores unscaled
 }
@@ -86,12 +86,12 @@ transformed parameters{
 
 model {
   // Variance component priors
-  lambda ~ inv_gamma(0.01, 0.01); 
-  sigma2 ~ inv_gamma(0.01, 0.01);
+  lambda ~ inv_gamma(0.001, 0.001); 
+  sigma2 ~ inv_gamma(0.001, 0.001);
   
   // Smoothing priors
-  h_mu ~ gamma(0.01, 0.01); 
-  to_vector(H) ~ gamma(0.01, 0.01); 
+  h_mu ~ gamma(0.001, 0.001); 
+  H ~ gamma(0.01, EV1/2 + 0.01); 
   
   int sdx;
   int edx;
@@ -102,7 +102,7 @@ model {
     target += Q / 2.0 * log(h_mu[p]) - h_mu[p] / 2.0 * quad_form(P_alpha, w_mu[sdx:edx]);
     
     for(k in 1:K){
-      target += Q / 2.0 * log(H[p,k]) -  H[p,k] / 2.0 * quad_form(P_alpha, Psi[sdx:edx,k]);
+      target += Q / 2.0 * log(H[k]) -  H[k] / 2.0 * quad_form(P_alpha, Psi[sdx:edx,k]);
     }
   }
   
