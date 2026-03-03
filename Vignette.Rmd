@@ -148,7 +148,11 @@ content_predict = inner_join(content_predict, S_df, by = "Arg")
 
 # Get domain and translate to (0, 1)
 domain = S_df$Arg
-scaled_domain = (domain - min(domain)) / (max(domain) - min(domain))
+minv = min(domain)
+maxv = max(domain)
+scaled_domain = (domain - minv) / (maxv - minv)
+fit_df = fit_df %>%
+  mutate(Arg = (Arg - minv)/(maxv - minv))
 
 N = n_distinct(fit_df$Subj)   # Number of participants
 Q = 20                        # Spline basis dimension
@@ -190,9 +194,19 @@ fit_joint = stan(file = "FAST/MSFAST_Parallel.stan",
 
 ## Evaluating Fit and Aligning Results
 
-We first fit mFACEs, extracting the estimates provided by this method to be used as our fixed point $\widetilde{\boldsymbol{\Phi}}$ for the Procrustes-based alignment of posterior FPC samples described in the manuscript.
+We first extract posterior estimates of MSFAST to be used as our fixed point $\widetilde{\boldsymbol{\Phi}}$ for the Procrustes-based alignment of posterior FPC samples described in the manuscript. We also fit the multivariate FACEs to use as a comparison.
 
 ```{r mFACEs_fit}
+# Posterior FPC estimate
+objects = FAST_extract(fit_joint, data_list$B, data_list)
+EF_ests = Latent_RSV(objects$Weights, objects$Score, data_list$B, P,
+                     domain)
+phi_tilde = EF_ests %>%
+  pivot_wider(names_from = FPC_Num, values_from = FPC_Val) %>%
+  arrange(Var, Arg) %>%
+  select(-c(Arg, Var)) %>%
+  as.matrix()
+
 # Data in list format
 face_data = list(content %>% 
                    filter(!(id %in% for_prediction)) %>%
@@ -205,12 +219,9 @@ face_data = list(content %>%
                    rename(argvals = agedays, 
                           subj = id, y = zwei))
 
-# Call to function
+# Call to mFACEs function
 face_fit = mface.sparse(face_data, argvals.new = domain, knots = Q-3,
                         knots.option = "quantile", pve = 0.999)
-
-# Extract first K FPC estimates as fixed point matrix
-phi_tilde = face_fit$eigenfunctions[,1:K] 
 ```
 
 We next check the Gelman-Rubin statistics for all relevant model components (after alignment). This is done automatically using the "RHat_FAST()" function as follows. This function calculates the median and max RHat observed for each FPC/covariate grouping within parameter families. 
@@ -226,12 +237,6 @@ rhats$Score
 
 # FPCs, grouped by FPC/functional component
 rhats$Func
-
-# Fixed effect smoothing parameters, grouped by covariate
-rhats$Mu_Smoothing
-
-# FPC smoothing parameters, grouped by FPC and covariate
-rhats$FPC_Smoothing
 
 # Variance components, no grouping
 rhats$Variances
@@ -250,7 +255,8 @@ objects = FAST_extract(fit_joint, basis_mat, data_list)
 align = procrust_WEI(objects$Weights, basis_mat, P, phi_tilde, objects$Score)
 
 # Extract FPC estimates and credible intervals
-EF_ests = FPC_Est_WEI(align$Weight, basis_mat, P, domain, phi_tilde)
+EF_ests = Latent_RSV(objects$Weights, objects$Score, basis_mat, P,
+                     domain)
 EF_bounds = FPC_CI(align$EF, domain, P)
 ```
 
@@ -298,7 +304,7 @@ We now visualize the multivariate FPCs according to MSFAST. All estimates are ac
 
 # Format mFACEs estimates for comparison
 {
-  FACE_FPC = data.frame(phi_tilde)
+  FACE_FPC = data.frame(face_fit$eigenfunctions[,1:K])
   colnames(FACE_FPC) = paste0("phi[", 1:K, "](t)")
   FACE_FPC$Arg = rep(face_fit$argvals.new, 2)
   FACE_FPC$Covar = rep(c("Length", "Weight"), each = length(face_fit$argvals.new))
