@@ -33,7 +33,7 @@ gen_mFPCA <- function(FPCs, N, P, domain, mu_func, Lambdas, sigma_eps, obs_ran,
   # Latent smooths
   GP_devs = map(1:N, function(n){
     if(diff){
-      n_obs = sample(obs_ran, size = P)
+      n_obs = sample(obs_ran, size = P, replace = T)
       obs_points = map(1:P, function(p){
         pts = sample(domain, n_obs[p])
         return(pts)
@@ -156,5 +156,4 @@ Multivar_F = function(P, K, SNR){
   
   return(list(Mu = MuFun, FPC = FPCs, EV = EVals, Sig2 = Sigma))
 }
-
 
