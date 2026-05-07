@@ -113,7 +113,7 @@ for(x in 1:n_sim){
     align = procrust_WEI(objects$Weights, new_B, P, mObjs$mFPC)
     
     Mu_df = FE_Summary(objects$Mu, sim_domain, P) %>%
-      left_join(data_list$consts, by = "Var") %>%
+      left_join(data_list$consts, by = "Var") %>% # Rescale the mean
       mutate(Est = Est * sd_Y + mu_Y, 
              LB = LB * sd_Y + mu_Y, 
              UB = UB * sd_Y + mu_Y)
@@ -124,7 +124,7 @@ for(x in 1:n_sim){
     
     Smooth_df = Smooth_Summary(N, P, objects$Mu, objects$EF, 
                                 objects$Score, sim_domain) %>%
-      left_join(data_list$consts, by = "Var") %>%
+      left_join(data_list$consts, by = "Var") %>% # Rescale smooths
       mutate(Est = Est * sd_Y + mu_Y, 
              LB = LB * sd_Y + mu_Y, 
              UB = UB * sd_Y + mu_Y) %>% 
