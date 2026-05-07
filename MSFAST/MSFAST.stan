@@ -15,10 +15,6 @@ data {
   matrix[Q, Q] P_alpha;         // Penalty matrix for splines
 }
 
-transformed data {
-  real EV1 = eigenvalues_sym(P_alpha)[1]; // Leading eigenvalue
-}
-
 parameters {
   vector<lower=0>[P] sigma2; // Error in observation
   
@@ -56,7 +52,7 @@ model {
   
   // Smoothing priors
   h_mu ~ gamma(0.001, 0.001); 
-  H ~ gamma(0.01, EV1/2 + 0.01); 
+  H ~ gamma(0.01, 0.01); 
   
   int sdx;
   int edx;

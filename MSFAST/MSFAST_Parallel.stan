@@ -43,7 +43,6 @@ data {
 transformed data{
   array[P] int start_indices;
   array[P] int p_vals;
-  real EV1 = eigenvalues_sym(P_alpha)[1]; // Leading eigenvalue
   {
     int pos = 1;
     for(p in 1:P){
@@ -91,7 +90,7 @@ model {
   
   // Smoothing priors
   h_mu ~ gamma(0.001, 0.001); 
-  H ~ gamma(0.01, EV1/2 + 0.01); 
+  H ~ gamma(0.01, 0.01); 
   
   int sdx;
   int edx;
