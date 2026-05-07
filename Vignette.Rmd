@@ -197,16 +197,6 @@ fit_joint = stan(file = "FAST/MSFAST_Parallel.stan",
 We first extract posterior estimates of MSFAST to be used as our fixed point $\widetilde{\boldsymbol{\Phi}}$ for the Procrustes-based alignment of posterior FPC samples described in the manuscript. We also fit the multivariate FACEs to use as a comparison.
 
 ```{r mFACEs_fit}
-# Posterior FPC estimate
-objects = FAST_extract(fit_joint, data_list$B, data_list)
-EF_ests = Latent_RSV(objects$Weights, objects$Score, data_list$B, P,
-                     domain)
-phi_tilde = EF_ests %>%
-  pivot_wider(names_from = FPC_Num, values_from = FPC_Val) %>%
-  arrange(Var, Arg) %>%
-  select(-c(Arg, Var)) %>%
-  as.matrix()
-
 # Data in list format
 face_data = list(content %>% 
                    filter(!(id %in% for_prediction)) %>%
@@ -227,6 +217,17 @@ face_fit = mface.sparse(face_data, argvals.new = domain, knots = Q-3,
 We next check the Gelman-Rubin statistics for all relevant model components (after alignment). This is done automatically using the "RHat_FAST()" function as follows. This function calculates the median and max RHat observed for each FPC/covariate grouping within parameter families. 
 
 ```{r rhat_eval}
+# Calculate estimates first, for target of alignment
+objects = FAST_extract(fit_joint, data_list$B, data_list)
+EF_ests = Latent_RSV(objects$Weights, objects$Score, data_list$B, P,
+                     domain)
+phi_tilde = EF_ests %>%
+  pivot_wider(names_from = FPC_Num, values_from = FPC_Val) %>%
+  arrange(Var, Arg) %>%
+  select(-c(Arg, Var)) %>%
+  as.matrix()
+
+# Calculate RHat statistics
 rhats = RHat_FAST(fit_joint,   # RSTAN object 
                   data_list,   # List of constants
                   data_list$B, # Orthogonal spline basis matrix
@@ -251,12 +252,19 @@ basis_mat = FAST_B("B", Q, scaled_domain)
 # Extract FPCs, corresponding weights, fixed effect weights, and scores
 objects = FAST_extract(fit_joint, basis_mat, data_list)
 
+# Extract FPC estimates
+EF_ests = Latent_RSV(objects$Weights, objects$Score, basis_mat, P,
+                     domain)
+phi_tilde = EF_ests %>%
+  pivot_wider(names_from = FPC_Num, values_from = FPC_Val) %>%
+  arrange(Var, Arg) %>%
+  select(-c(Arg, Var)) %>%
+  as.matrix()
+
 # Align samples using Procrustes-based procedure
 align = procrust_WEI(objects$Weights, basis_mat, P, phi_tilde, objects$Score)
 
-# Extract FPC estimates and credible intervals
-EF_ests = Latent_RSV(objects$Weights, objects$Score, basis_mat, P,
-                     domain)
+# Calculate credible intervals
 EF_bounds = FPC_CI(align$EF, domain, P)
 ```
 
@@ -419,7 +427,7 @@ trajectories = map(thresholds, function(age_thresh) { # Predictions at each thre
     return(person_traj %>% mutate(id = sid))
   }) %>% list_rbind() %>%
     filter(Arg <= max_project) %>% # Only project to 500 days
-    mutate(Var = case_when(Metric == "zlen" ~ 1, # Undo standardization
+    mutate(Var = case_when(Metric == "zlen" ~ 1, # Rescale the data
                            TRUE ~ 2)) %>%
     left_join(data_list$consts, by = "Var") %>%
     mutate(Traj = Traj * sd_Y + mu_Y) %>%
